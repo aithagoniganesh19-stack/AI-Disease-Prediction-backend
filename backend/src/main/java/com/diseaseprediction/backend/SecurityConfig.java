@@ -1,5 +1,6 @@
 package com.diseaseprediction.backend;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,77 +18,80 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    // Injected from application.properties / Render env var ALLOWED_ORIGIN
+    @Value("${cors.allowed-origin:http://localhost:5173}")
+    private String allowedOrigin;
 
-public SecurityConfig(
-        JwtAuthenticationFilter jwtAuthenticationFilter) {
-    this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-}
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
-@Bean
-public SecurityFilterChain securityFilterChain(
-        HttpSecurity http) throws Exception {
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-    http
-        .csrf(csrf -> csrf.disable())
+        http
+            .csrf(csrf -> csrf.disable())
 
-        .cors(cors -> {})
+            // Explicitly wire our CorsConfigurationSource bean.
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-        // This API uses JWT rather than server-side sessions.
-        .sessionManagement(session -> session
-            .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-        )
+            // This API uses JWT rather than server-side sessions.
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
 
-        .authorizeHttpRequests(auth -> auth
-           .requestMatchers(
-    "/api/health",
-    "/api/symptoms",
-    "/api/auth/register",
-    "/api/auth/login",
-    "/api/predict"
-).permitAll()
-.anyRequest().authenticated()
-        )
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(
+                    "/api/health",
+                    "/api/symptoms",
+                    "/api/auth/register",
+                    "/api/auth/login",
+                    "/api/predict"
+                ).permitAll()
+                .anyRequest().authenticated()
+            )
 
-        // Validate JWT tokens before Spring's username/password filter.
-        .addFilterBefore(
-            jwtAuthenticationFilter,
-            UsernamePasswordAuthenticationFilter.class
+            // Validate JWT tokens before Spring's username/password filter.
+            .addFilterBefore(
+                jwtAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter.class
+            );
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        // Allow both the env-configured origin and localhost for local development.
+        configuration.setAllowedOrigins(List.of(
+            allowedOrigin,
+            "http://localhost:5173",
+            "http://localhost:4173"
+        ));
+
+        configuration.setAllowedMethods(
+            List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
         );
 
-    return http.build();
-}
+        configuration.setAllowedHeaders(
+            List.of("Authorization", "Content-Type")
+        );
 
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
+        configuration.setAllowCredentials(false);
 
-    CorsConfiguration configuration = new CorsConfiguration();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
 
-    configuration.setAllowedOrigins(
-        List.of("http://localhost:5173")
-    );
+        return source;
+    }
 
-    configuration.setAllowedMethods(
-        List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
-    );
-
-    configuration.setAllowedHeaders(
-        List.of("Authorization", "Content-Type")
-    );
-
-    UrlBasedCorsConfigurationSource source =
-            new UrlBasedCorsConfigurationSource();
-
-    source.registerCorsConfiguration("/**", configuration);
-
-    return source;
-}
-
-@Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-}
-
-
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 }

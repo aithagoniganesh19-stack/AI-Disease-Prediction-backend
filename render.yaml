@@ -1,0 +1,47 @@
+# render.yaml — Backend-only Render Blueprint
+# Place this file at the ROOT of your backend GitHub repo.
+# (The root that contains the inner /backend folder with pom.xml)
+#
+# HOW TO USE:
+#   1. Commit + push this file to your backend GitHub repo.
+#   2. On Render → New → Blueprint → connect your repo → apply.
+#   3. Render creates the PostgreSQL DB + backend web service automatically.
+#   4. After the backend is live, copy its URL (e.g. https://ai-disease-backend.onrender.com)
+#      then go to your frontend static site (deploy separately) and set:
+#        VITE_API_URL = https://ai-disease-backend.onrender.com/api
+
+databases:
+  - name: ai-disease-db
+    databaseName: disease_prediction
+    user: disease_user
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: ai-disease-backend
+    runtime: java
+    region: oregon
+    plan: free
+    rootDir: backend          # <-- the inner folder that contains pom.xml
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/backend-0.0.1-SNAPSHOT.jar
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-disease-db
+          property: connectionString
+      - key: DB_USERNAME
+        fromDatabase:
+          name: ai-disease-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: ai-disease-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      # After deploying frontend, set ALLOWED_ORIGIN to its Render URL:
+      - key: ALLOWED_ORIGIN
+        value: https://ai-disease-frontend.onrender.com
